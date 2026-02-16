@@ -1,0 +1,10 @@
+# Local artifacts (appended by Copilot 2026-02-16)
+output/*.json
+output/*.md
+logs/*.log
+database/*.db
+.env
+*.env
+**/.env
+__pycache__/
+*.db

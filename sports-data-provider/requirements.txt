@@ -1,0 +1,4 @@
+requests
+logging
+pandas
+jsonschema

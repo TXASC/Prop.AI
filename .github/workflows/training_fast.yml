@@ -1,0 +1,113 @@
+name: Hands-Off Training FAST
+
+on:
+  schedule:
+    - cron: '15 10 * * *' # Every day at 10:15 UTC
+  workflow_dispatch:
+
+jobs:
+  training-fast:
+    runs-on: windows-latest
+    env:
+      ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+    steps:
+
+
+
+
+
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Ensure all required directories exist
+        run: |
+          $dirs = @('database', 'cache', 'data/cache', 'output', 'logs')
+          foreach ($d in $dirs) { if (!(Test-Path $d)) { New-Item -ItemType Directory -Path $d | Out-Null } }
+        shell: pwsh
+
+      - name: Restore persistent DB and cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            database/prop_ai.db
+            database/*.db
+            database/*.sqlite
+            database/*.sqlite3
+            cache/**
+            data/cache/**
+            logs/odds_cache*.db
+          key: prop-ai-state-${{ runner.os }}-v1
+          restore-keys: prop-ai-state-${{ runner.os }}-
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Create and activate venv
+        run: |
+          python -m venv .venv
+          .\.venv\Scripts\python -m pip install --upgrade pip
+
+      - name: Install root requirements
+        run: .\.venv\Scripts\python -m pip install -r requirements.txt
+
+      - name: Install sports_betting_platform requirements (if present)
+        run: |
+          if (Test-Path "sports_betting_platform/requirements.txt") {
+            .\.venv\Scripts\python -m pip install -r sports_betting_platform/requirements.txt
+          }
+        shell: pwsh
+
+      - name: Run FAST mode (PowerShell script if present)
+        id: fast_ps1
+        run: |
+          if (Test-Path "jobs/run_training_mode_fast.ps1") {
+            powershell -ExecutionPolicy Bypass -File .\jobs\run_training_mode_fast.ps1
+          } else {
+            .\.venv\Scripts\python jobs/training_runner.py --mode fast --reason "github_actions_fast"
+            if (Test-Path "jobs/weekly_digest.py") {
+              .\.venv\Scripts\python jobs/weekly_digest.py
+            }
+          }
+        shell: pwsh
+
+      - name: Safety check (print python and dir)
+        run: |
+          .\.venv\Scripts\python -c "import sys; print(sys.executable)"
+          Get-ChildItem output
+          Get-ChildItem logs
+        shell: pwsh
+
+      - name: Upload weekly_digest.md
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly_digest
+          path: output/weekly_digest.md
+          if-no-files-found: warn
+
+      - name: Upload fast_top_edges.json
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fast_top_edges
+          path: output/fast_top_edges.json
+          if-no-files-found: warn
+
+      - name: Upload training_runner.log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: training_runner_log
+          path: logs/training_runner.log
+          if-no-files-found: warn
+
+      - name: Upload prop_ai.db (optional)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prop_ai_db
+          path: database/prop_ai.db
+          if-no-files-found: ignore
